@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: var(--font-serif), Georgia, Cambria, "Times New Roman", serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+
+  --color-gold: #C5A059;
+  --color-gold-light: #DFC894;
+  --color-gold-dark: #987532;
+  --color-cream: #FDFBF7;
+  --color-cream-dark: #F5EFE6;
+  --color-charcoal: #171513;
+}
+
+:root {
+  --background: #FDFBF7;
+  --foreground: #171513;
+  --card: #FFFFFF;
+  --card-foreground: #171513;
+  --popover: #FFFFFF;
+  --popover-foreground: #171513;
+  --primary: #171513;
+  --primary-foreground: #FDFBF7;
+  --secondary: #F6F1E7;
+  --secondary-foreground: #171513;
+  --muted: #F3ECE1;
+  --muted-foreground: #6F6961;
+  --accent: #EFE6D5;
+  --accent-foreground: #171513;
+  --destructive: #B91C1C;
+  --border: #EAE3D5;
+  --input: #EAE3D5;
+  --ring: #C5A059;
+  --radius: 0.875rem;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, .font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Gold Gradient utilities */
+.bg-gold-gradient {
+  background: linear-gradient(135deg, #C5A059 0%, #DFC894 50%, #987532 100%);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #C5A059 0%, #E8D3A7 50%, #B38D40 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-shadow {
+  box-shadow: 0 8px 30px -4px rgba(197, 160, 89, 0.22);
+}
+
+.luxe-card {
+  background: #FFFFFF;
+  border: 1px solid #EAE3D5;
+  box-shadow: 0 4px 20px -2px rgba(23, 21, 19, 0.04);
+}
+
+.luxe-card:hover {
+  border-color: #D6C7AD;
+  box-shadow: 0 10px 30px -4px rgba(23, 21, 19, 0.08);
+}
+
+/* Custom luxury scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9D1C1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C5A059;
+}
+
+@media print {
+  body.printing-invoice * {
+    visibility: hidden !important;
+  }
+
+  body.printing-invoice .invoice-print,
+  body.printing-invoice .invoice-print * {
+    visibility: visible !important;
+  }
+
+  body.printing-invoice .invoice-print {
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
+    width: 72mm !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+
+  body.printing-invoice.printing-invoice-a4 .invoice-print {
+    width: 190mm !important;
+  }
+
+  body.printing-invoice .invoice-print-controls {
+    display: none !important;
+  }
+
+  @page {
+    margin: 4mm;
+  }
+}

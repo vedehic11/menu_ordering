@@ -1,0 +1,376 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. RESTAURANTS
+model Restaurant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  address   String?
+  phone     String?
+  email     String?
+  currency  String   @default("INR")
+  gstin     String?  @default("27AABCM8921N1ZM")
+  isOpen    Boolean  @default(true) @map("is_open")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tables         DiningTable[]
+  categories     MenuCategory[]
+  staffMembers   StaffMember[]
+  shifts         CashierShift[]
+  auditLogs      AuditLog[]
+  carouselSlides CarouselSlide[]
+
+  @@map("restaurants")
+}
+
+// 2. DINING TABLES
+model DiningTable {
+  id             String    @id @default(uuid())
+  restaurantId   String    @map("restaurant_id")
+  tableNumber    String    @map("table_number")
+  qrToken        String    @unique @default(uuid()) @map("qr_token")
+  isActive       Boolean   @default(true) @map("is_active")
+  tokenRotatedAt DateTime? @map("token_rotated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sessions        TableSession[]
+  serviceRequests ServiceRequest[]
+
+  @@unique([restaurantId, tableNumber])
+  @@map("dining_tables")
+}
+
+// 3. TABLE SESSIONS (The core dining visit entity)
+enum SessionStatus {
+  open
+  bill_requested
+  closing
+  settled
+  cancelled
+}
+
+model TableSession {
+  id            String        @id @default(uuid())
+  tableId       String        @map("table_id")
+  sessionNumber Int           @unique @default(autoincrement()) @map("session_number")
+  status        SessionStatus @default(open)
+  guestCount    Int           @default(2) @map("guest_count")
+  openedAt      DateTime      @default(now()) @map("opened_at")
+  closedAt      DateTime?     @map("closed_at")
+
+  openedById String? @map("opened_by_id")
+  closedById String? @map("closed_by_id")
+
+  table       DiningTable      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  orders      Order[]
+  settlement  Settlement?
+  adjustments BillAdjustment[]
+
+  @@index([tableId, status])
+  @@map("table_sessions")
+}
+
+// 4. MENU CATEGORIES & ITEMS WITH KITCHEN STATION ROUTING
+enum KitchenStation {
+  robata
+  pizza
+  mains
+  bar
+  pastry
+}
+
+model MenuCategory {
+  id           String         @id @default(uuid())
+  restaurantId String         @map("restaurant_id")
+  name         String
+  description  String?
+  station      KitchenStation @default(mains)
+  displayOrder Int            @default(0) @map("display_order")
+  isActive     Boolean        @default(true) @map("is_active")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems  MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model CarouselSlide {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  title        String
+  sub          String
+  image        String
+  isActive     Boolean  @default(true) @map("is_active")
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, isActive, displayOrder])
+  @@map("carousel_slides")
+}
+
+model MenuItem {
+  id            String         @id @default(uuid())
+  categoryId    String         @map("category_id")
+  name          String
+  description   String?
+  pricePaise    Int            @map("price_paise")
+  imageUrl      String?        @map("image_url")
+  calories      Int?
+  proteinGrams  Float?         @map("protein_grams")
+  carbsGrams    Float?         @map("carbs_grams")
+  fatGrams      Float?         @map("fat_grams")
+  station       KitchenStation @default(mains)
+  isAvailable   Boolean        @default(true) @map("is_available")
+  isVegetarian  Boolean        @default(false) @map("is_vegetarian")
+  isChefSpecial Boolean        @default(false) @map("is_chef_special")
+  displayOrder  Int            @default(0) @map("display_order")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  category   MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@map("menu_items")
+}
+
+// 5. CUSTOMERS
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@index([phone])
+  @@index([email])
+  @@map("customers")
+}
+
+// 6. ORDER ROUNDS (Kitchen preparation progress decoupled from billing)
+enum KitchenStatus {
+  received
+  accepted
+  preparing
+  ready
+  served
+  cancelled
+}
+
+model Order {
+  id                  String        @id @default(uuid())
+  orderNumber         Int           @unique @default(autoincrement()) @map("order_number")
+  sessionId           String        @map("session_id")
+  customerId          String        @map("customer_id")
+  roundNumber         Int           @default(1) @map("round_number")
+  kitchenStatus       KitchenStatus @default(accepted) @map("kitchen_status")
+  subtotalPaise       Int           @map("subtotal_paise")
+  taxPaise            Int           @default(0) @map("tax_paise")
+  cgstPaise           Int           @default(0) @map("cgst_paise")
+  sgstPaise           Int           @default(0) @map("sgst_paise")
+  totalPaise          Int           @map("total_paise")
+  specialInstructions String?       @map("special_instructions")
+  idempotencyKey      String        @unique @map("idempotency_key")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  session  TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items    OrderItem[]
+
+  @@unique([sessionId, roundNumber])
+  @@index([sessionId, createdAt(sort: Desc)])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String         @id @default(uuid())
+  orderId             String         @map("order_id")
+  menuItemId          String?        @map("menu_item_id")
+  itemName            String         @map("item_name")
+  station             KitchenStation @default(mains)
+  unitPricePaise      Int            @map("unit_price_paise")
+  quantity            Int
+  specialInstructions String?        @map("special_instructions")
+  lineTotalPaise      Int            @map("line_total_paise")
+  isDone              Boolean        @default(false) @map("is_done")
+  isVoided            Boolean        @default(false) @map("is_voided")
+  voidReason          String?        @map("void_reason")
+  createdAt           DateTime       @default(now()) @map("created_at")
+
+  order    Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// 7. COUNTER SETTLEMENTS & MULTI-TENDER PAYMENTS
+model Settlement {
+  id             String   @id @default(uuid())
+  sessionId      String   @unique @map("session_id")
+  cashierId      String?  @map("cashier_id")
+  shiftId        String?  @map("shift_id")
+  invoiceNumber  String?  @unique @map("invoice_number")
+  subtotalPaise  Int      @map("subtotal_paise")
+  discountPaise  Int      @default(0) @map("discount_paise")
+  taxPaise       Int      @default(0) @map("tax_paise")
+  cgstPaise      Int      @default(0) @map("cgst_paise")
+  sgstPaise      Int      @default(0) @map("sgst_paise")
+  totalPaidPaise Int      @map("total_paid_paise")
+  settledAt      DateTime @default(now()) @map("settled_at")
+
+  session  TableSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  cashier  StaffMember?        @relation(fields: [cashierId], references: [id])
+  shift    CashierShift?       @relation(fields: [shiftId], references: [id])
+  payments SettlementPayment[]
+
+  @@map("settlements")
+}
+
+enum PaymentTender {
+  cash
+  upi
+  card
+  other
+}
+
+model SettlementPayment {
+  id           String        @id @default(uuid())
+  settlementId String        @map("settlement_id")
+  tender       PaymentTender
+  amountPaise  Int           @map("amount_paise")
+  reference    String?
+  receivedAt   DateTime      @default(now()) @map("received_at")
+
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@map("settlement_payments")
+}
+
+// 8. BILL ADJUSTMENTS (Discounts, Manager Voids)
+model BillAdjustment {
+  id           String   @id @default(uuid())
+  sessionId    String   @map("session_id")
+  authorizerId String?  @map("authorizer_id")
+  type         String // 'discount_percentage' | 'discount_flat' | 'item_void'
+  amountPaise  Int      @map("amount_paise")
+  reason       String
+  appliedAt    DateTime @default(now()) @map("applied_at")
+
+  session TableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("bill_adjustments")
+}
+
+// 9. SERVICE REQUESTS
+model ServiceRequest {
+  id           String   @id @default(uuid())
+  tableId      String   @map("table_id")
+  tableNumber  String   @map("table_number")
+  type         String // 'waiter' | 'water' | 'cutlery' | 'bill'
+  note         String?
+  status       String   @default("pending") // 'pending' | 'resolved'
+  resolvedById String?  @map("resolved_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  table DiningTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@map("service_requests")
+}
+
+// 10. STAFF MEMBERS & CASHIER SHIFTS
+enum StaffRole {
+  owner
+  manager
+  cashier
+  chef
+  captain
+}
+
+model StaffMember {
+  id           String    @id @default(uuid())
+  restaurantId String    @map("restaurant_id")
+  name         String
+  role         StaffRole @default(cashier)
+  phone        String?
+  email        String?   @unique
+  pinHash      String    @map("pin_hash")
+  authVersion  Int       @default(0) @map("auth_version")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  restaurant  Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  shifts      CashierShift[]
+  settlements Settlement[]
+  pinTokens   StaffPinToken[]
+
+  @@map("staff_members")
+}
+
+model StaffPinToken {
+  id            String    @id @default(uuid())
+  staffId       String    @map("staff_id")
+  requestedById String    @map("requested_by_id")
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at")
+  usedAt        DateTime? @map("used_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  staff      StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  @@index([staffId, createdAt])
+  @@index([expiresAt])
+  @@map("staff_pin_tokens")
+}
+
+model CashierShift {
+  id           String    @id @default(uuid())
+  restaurantId String    @map("restaurant_id")
+  cashierId    String    @map("cashier_id")
+  openingCash  Int       @default(0) @map("opening_cash")
+  closingCash  Int?      @map("closing_cash")
+  expectedCash Int?      @map("expected_cash")
+  openedAt     DateTime  @default(now()) @map("opened_at")
+  closedAt     DateTime? @map("closed_at")
+  status       String    @default("open") // 'open' | 'closed'
+
+  restaurant  Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  cashier     StaffMember  @relation(fields: [cashierId], references: [id])
+  settlements Settlement[]
+
+  @@map("cashier_shifts")
+}
+
+// 11. AUDIT LOGS
+model AuditLog {
+  id           String   @id @default(uuid())
+  restaurantId String   @map("restaurant_id")
+  action       String // 'SESSION_OPENED' | 'ORDER_PLACED' | 'SETTLEMENT_RECORDED' | 'ITEM_VOIDED'
+  actorType    String // 'guest' | 'staff' | 'system'
+  actorId      String?  @map("actor_id")
+  staffName    String?  @map("staff_name")
+  ipAddress    String?  @map("ip_address")
+  details      String?
+  timestamp    DateTime @default(now())
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, timestamp(sort: Desc)])
+  @@map("audit_logs")
+}
